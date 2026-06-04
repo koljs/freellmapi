@@ -10,10 +10,11 @@ import { todayStats, hourlyRequests, successRateToday } from './stats.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_PORT = 31415;
 
-// Lean posture: no GPU process, one instance, menu-bar only.
+// Lean posture: one instance, menu-bar only. GPU stays ON — vibrancy
+// (the popover/dashboard glass) needs GPU compositing; with hardware
+// acceleration disabled, transparent windows render an opaque white.
 app.setName('FreeLLMAPI');
 app.setPath('userData', path.join(app.getPath('appData'), 'FreeLLMAPI'));
-app.disableHardwareAcceleration();
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();

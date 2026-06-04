@@ -29,14 +29,14 @@ export function openDashboard(port: number, token: string): void {
     title: 'FreeLLMAPI',
     // Native feel: traffic lights float over the app's own header (the client
     // adds a drag region + left padding when it detects the desktop shell),
-    // and the window carries an under-window vibrancy so the client's
-    // slightly-translucent desktop backdrop (html.desktop in index.css)
-    // picks up a hint of the same glass as the tray popover. The material
+    // and the window carries a sidebar vibrancy — the strong, Finder-style
+    // material — so the client's translucent desktop backdrop (html.desktop
+    // in index.css) shows real glass, matching the tray popover. The material
     // follows nativeTheme.themeSource, i.e. the dashboard's own theme.
     ...(process.platform === 'darwin'
       ? {
           titleBarStyle: 'hiddenInset' as const,
-          vibrancy: 'under-window' as const,
+          vibrancy: 'sidebar' as const,
           visualEffectState: 'followWindow' as const,
           backgroundColor: '#00000000',
         }

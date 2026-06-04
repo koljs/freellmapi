@@ -19,10 +19,21 @@ if (arg) {
 // no Sign out) when running inside the desktop shell.
 contextBridge.exposeInMainWorld('__FREEAPI_DESKTOP__', true);
 
-// `desktop` class before page styles paint → the client's translucent
-// desktop backdrop applies from the first frame (window vibrancy shows
-// through, no opaque flash).
-document.documentElement.classList.add('desktop');
+// `desktop` class on <html> activates the client's translucent backdrop
+// (html.desktop in index.css). CAREFUL: for an http:// load the preload
+// runs before the page's document is parsed — documentElement is null or
+// a placeholder that the parser replaces — so the early add is best-effort
+// (no-flash when it sticks) and MUST NOT throw, or the theme observer
+// below would never register. The client re-adds the class itself at
+// module load (App.tsx), so the effect never depends on the early add.
+function applyDesktopClass() {
+  document.documentElement?.classList.add('desktop');
+}
+try {
+  applyDesktopClass();
+} catch {
+  // Document not ready — DOMContentLoaded below covers it.
+}
 
 // Mirror the dashboard's theme to the main process so the tray popover
 // matches. The dashboard expresses its theme as the `dark` class on
@@ -36,6 +47,7 @@ function reportTheme() {
   );
 }
 window.addEventListener('DOMContentLoaded', () => {
+  applyDesktopClass();
   reportTheme();
   new MutationObserver(reportTheme).observe(document.documentElement, {
     attributes: true,
