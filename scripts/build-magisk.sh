@@ -121,21 +121,23 @@ fi
 
 # --- 6. Cross-compile better-sqlite3 for arm64/linux -------------------------
 echo "[6/7] Compiling better-sqlite3 ${BETTER_SQLITE3_VERSION} for arm64/linux (Docker)..."
-NATIVE_DIR="$MODULE_DIR/files/native/better-sqlite3"
-mkdir -p "$NATIVE_DIR"
+NM_DIR="$MODULE_DIR/files/node_modules"
+mkdir -p "$NM_DIR"
 
 # Run an arm64 Ubuntu container under qemu emulation. We install build-essential
 # + python3 (node-gyp needs both), npm-install just better-sqlite3 (no native
 # prebuilt binary exists for arm64/linux in npm's registry for this version,
-# so node-gyp compiles from source), then copy the resulting package out.
+# so node-gyp compiles from source), then copy the WHOLE node_modules out.
+#
+# We need the whole node_modules (not just better-sqlite3) because
+# better-sqlite3's lib/database.js does `require('bindings')` at runtime —
+# bindings + file-uri-to-path are its production deps and must be resolvable
+# via the node_modules walk alongside better-sqlite3 itself.
+#
 # --platform=linux/arm64 requires qemu-user-static registered via binfmt_misc
 # (on Docker Desktop and most CI runners this is set up automatically).
-#
-# Mount the parent native/ dir (not better-sqlite3/ itself) so the in-container
-# `cp -r node_modules/better-sqlite3 /out/` lands at /out/better-sqlite3/ —
-# matching the $NATIVE_DIR path the host-side check and service.sh expect.
 docker run --rm --platform linux/arm64 \
-  -v "$MODULE_DIR/files/native:/out" \
+  -v "$MODULE_DIR/files:/out" \
   -e BETTER_SQLITE3_VERSION="$BETTER_SQLITE3_VERSION" \
   ubuntu:22.04 \
   bash -c '
@@ -147,15 +149,18 @@ docker run --rm --platform linux/arm64 \
     cd /tmp
     npm init -y > /dev/null
     npm install --no-audit --no-fund --build-from-source better-sqlite3@${BETTER_SQLITE3_VERSION}
-    # Copy the whole package tree so require("better-sqlite3") resolves
-    # lib/index.js -> build/Release/better_sqlite3.node at runtime.
-    rm -rf /out/better-sqlite3
-    cp -r node_modules/better-sqlite3 /out/better-sqlite3
-    echo "  Native module built: $(ls -la /out/better-sqlite3/build/Release/better_sqlite3.node)"
-    echo "  ELF check: $(file /out/better-sqlite3/build/Release/better_sqlite3.node)"
+    # Copy the whole node_modules tree so both the ESM resolver (for
+    # import "better-sqlite3") and the CJS resolver (for the internal
+    # require("bindings") inside better-sqlite3) find their packages via
+    # the standard node_modules walk at runtime.
+    rm -rf /out/node_modules
+    cp -r node_modules /out/node_modules
+    echo "  Packages: $(ls /out/node_modules | tr '\n' ' ')"
+    echo "  Native module: $(ls -la /out/node_modules/better-sqlite3/build/Release/better_sqlite3.node)"
+    echo "  ELF check: $(file /out/node_modules/better-sqlite3/build/Release/better_sqlite3.node)"
   '
 
-if [ ! -f "$NATIVE_DIR/build/Release/better_sqlite3.node" ]; then
+if [ ! -f "$NM_DIR/better-sqlite3/build/Release/better_sqlite3.node" ]; then
   echo "ERROR: better-sqlite3 native module not built"
   echo "Hint: ensure qemu-user-static is installed: docker run --rm --privileged multiarch/qemu-user-static --reset -p yes"
   exit 1
