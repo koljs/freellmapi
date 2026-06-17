@@ -1,0 +1,84 @@
+name: Build Magisk Module
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Module version tag (e.g. v0.1.0). Leave empty to derive from server/package.json.'
+        required: false
+        type: string
+
+permissions:
+  contents: write   # needed by softprops/action-gh-release to create releases
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up QEMU (for arm64 Docker emulation)
+        # better-sqlite3 is a native C++ module — we compile it inside an
+        # arm64 Ubuntu container under qemu-user-static so the resulting
+        # .node file is glibc/arm64-linked and matches the bundled Node.js
+        # linux-arm64 binary. ubuntu-latest's Docker has no arm64 support
+        # out of the box; this registers the binfmt handlers.
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Install npm dependencies
+        # --ignore-scripts skips better-sqlite3's prebuilt-binary download
+        # and native compile on the runner — we don't need the host build,
+        # only the esbuild bundle + the arm64-compiled native module that
+        # build-magisk.sh produces inside Docker.
+        run: npm install --no-audit --no-fund --ignore-scripts
+
+      - name: Build Magisk module
+        run: bash scripts/build-magisk.sh
+
+      - name: Inspect module contents
+        # Sanity dump — useful when debugging a broken build. Shows the
+        # final layout + sizes so you can confirm node/lib/native landed
+        # in the right places without downloading the artifact.
+        run: |
+          echo "=== Module tree ==="
+          find build/magisk/freellmapi -maxdepth 3 -type f -printf '%P\t%s bytes\n' | sort
+          echo ""
+          echo "=== Native module check ==="
+          file build/magisk/freellmapi/files/native/better-sqlite3/build/Release/better_sqlite3.node || true
+          echo ""
+          echo "=== Node binary check ==="
+          file build/magisk/freellmapi/files/node || true
+          echo ""
+          echo "=== Zip ==="
+          ls -lh freellmapi-magisk-*.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: freellmapi-magisk-module
+          path: freellmapi-magisk-*.zip
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        # Only publish a release when the run was triggered by a tag push.
+        # workflow_dispatch runs just produce the artifact above.
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: freellmapi-magisk-*.zip
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
