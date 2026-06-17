@@ -13,7 +13,10 @@ PID_FILE="$DATA_DIR/freellmapi.pid"
 
 NODE_BIN="$DATA_DIR/node"
 LINKER="$DATA_DIR/lib/ld-linux-aarch64.so.1"
-NATIVE_DIR="$DATA_DIR/native"   # holds better-sqlite3's .node + package layout
+# $DATA_DIR/node_modules holds better-sqlite3 + bindings + file-uri-to-path,
+# staged from the module dir. The ESM resolver walks up from dist/index.mjs
+# and finds $DATA_DIR/node_modules/better-sqlite3; better-sqlite3's internal
+# CJS require('bindings') finds $DATA_DIR/node_modules/bindings the same way.
 
 # --- Wait for boot to settle --------------------------------------------------
 while [ "$(getprop sys.boot_completed)" != "1" ]; do
@@ -52,11 +55,24 @@ if [ -d "$APP_DIR/lib" ]; then
   done
 fi
 
-# Stage the better-sqlite3 native package. We copy the whole tree so Node's
-# require resolver can find lib/index.js -> build/Release/better_sqlite3.node.
-if [ -d "$APP_DIR/native/better-sqlite3" ]; then
-  rm -rf "$NATIVE_DIR/better-sqlite3"
-  cp -rf "$APP_DIR/native/better-sqlite3" "$NATIVE_DIR/better-sqlite3"
+# Stage the node_modules tree (better-sqlite3 + bindings + file-uri-to-path).
+# Copied as a real directory (not symlinked) so the module dir can be unmounted
+# or upgraded without breaking the running server's require resolution.
+if [ -d "$APP_DIR/node_modules" ]; then
+  rm -rf "$DATA_DIR/node_modules"
+  cp -rf "$APP_DIR/node_modules" "$DATA_DIR/node_modules"
+fi
+
+# Stage the server bundle into $DATA_DIR/dist/. The bundle must live under
+# $DATA_DIR (not the read-only module dir) so that Node's ESM resolver, when
+# walking up from dist/index.mjs looking for node_modules/, finds the staged
+# node_modules tree. ESM bare-specifier imports (e.g. `import "better-sqlite3"`)
+# do NOT consult NODE_PATH — only the node_modules walk works — so the
+# bundle's location and the node_modules tree must form a real package layout.
+BUNDLE_DST="$DATA_DIR/dist/index.mjs"
+if [ -f "$APP_DIR/dist/index.mjs" ]; then
+  mkdir -p "$DATA_DIR/dist"
+  stage_file "$APP_DIR/dist/index.mjs" "$BUNDLE_DST"
 fi
 
 # Sanity checks — abort cleanly if the module was installed without running
@@ -69,8 +85,12 @@ if [ ! -x "$LINKER" ]; then
   echo "[$(date '+%F %T')] FATAL: glibc linker missing at $LINKER" >> "$LOG_FILE"
   exit 1
 fi
-if [ ! -f "$NATIVE_DIR/better-sqlite3/build/Release/better_sqlite3.node" ]; then
+if [ ! -f "$DATA_DIR/node_modules/better-sqlite3/build/Release/better_sqlite3.node" ]; then
   echo "[$(date '+%F %T')] FATAL: better-sqlite3 native module missing" >> "$LOG_FILE"
+  exit 1
+fi
+if [ ! -f "$BUNDLE_DST" ]; then
+  echo "[$(date '+%F %T')] FATAL: server bundle missing at $BUNDLE_DST" >> "$LOG_FILE"
   exit 1
 fi
 
@@ -79,12 +99,9 @@ fi
 #                    dir into the persistent data dir.
 # FREEAPI_ENV_PATH — point dotenv at the user's .env (with ENCRYPTION_KEY).
 # CLIENT_DIST      — serve the built React dashboard from the module dir.
-# NODE_PATH        — let the esbuild bundle's `require('better-sqlite3')`
-#                    resolve to the staged native package.
 export FREEAPI_DB_PATH="$DATA_DIR/data/freeapi.db"
 export FREEAPI_ENV_PATH="$DATA_DIR/.env"
 export CLIENT_DIST="$APP_DIR/client"
-export NODE_PATH="$NATIVE_DIR"
 export NODE_ENV=production
 export HOME="$DATA_DIR"
 
@@ -105,8 +122,10 @@ while true; do
   # Launch node via the glibc dynamic linker. --library-path makes the bundled
   # glibc libs take precedence over Android's Bionic libs for this process
   # tree only — system-wide libc is untouched.
+  # Bundle is launched from $DATA_DIR/dist/ (not the module dir) so the ESM
+  # resolver's node_modules walk finds the better-sqlite3 symlink.
   "$LINKER" --library-path "$DATA_DIR/lib" "$NODE_BIN" \
-    "$APP_DIR/dist/index.mjs" >> "$LOG_FILE" 2>&1
+    "$BUNDLE_DST" >> "$LOG_FILE" 2>&1
   EXIT_CODE=$?
 
   echo "[$(date '+%F %T')] Process exited (code $EXIT_CODE), restarting in ${BACKOFF}s..." >> "$LOG_FILE"

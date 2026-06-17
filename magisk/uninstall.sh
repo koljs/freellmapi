@@ -18,8 +18,9 @@ if [ -f "$PID_FILE" ]; then
   rm -f "$PID_FILE"
 fi
 
-# Remove staged binaries and the staged native module. Keep $DATA_DIR itself,
-# $DATA_DIR/.env, $DATA_DIR/data, and $DATA_DIR/service.log.
+# Remove staged binaries, the staged node_modules, and the staged bundle.
+# Keep $DATA_DIR itself, $DATA_DIR/.env, $DATA_DIR/data, and $DATA_DIR/service.log.
 rm -f "$DATA_DIR/node"
 rm -rf "$DATA_DIR/lib"
-rm -rf "$DATA_DIR/native"
+rm -rf "$DATA_DIR/node_modules"
+rm -rf "$DATA_DIR/dist"

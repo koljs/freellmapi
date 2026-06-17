@@ -5,4 +5,4 @@
 # without racing against mkdir.
 
 DATA_DIR=/data/local/freellmapi
-mkdir -p "$DATA_DIR" "$DATA_DIR/data" "$DATA_DIR/lib" "$DATA_DIR/native"
+mkdir -p "$DATA_DIR" "$DATA_DIR/data" "$DATA_DIR/lib"
