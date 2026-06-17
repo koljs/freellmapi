@@ -134,31 +134,19 @@ mkdir -p "$NM_DIR"
 # bindings + file-uri-to-path are its production deps and must be resolvable
 # via the node_modules walk alongside better-sqlite3 itself.
 #
+# The in-container script lives in a separate file (docker-build-native.sh)
+# and is bind-mounted read-only. This avoids the quoting hell of nesting
+# $(...), single quotes, and double quotes inside a `bash -c '...'` docker
+# argument — which broke the build twice before.
+#
 # --platform=linux/arm64 requires qemu-user-static registered via binfmt_misc
 # (on Docker Desktop and most CI runners this is set up automatically).
 docker run --rm --platform linux/arm64 \
   -v "$MODULE_DIR/files:/out" \
+  -v "$SCRIPT_DIR/docker-build-native.sh:/build.sh:ro" \
   -e BETTER_SQLITE3_VERSION="$BETTER_SQLITE3_VERSION" \
   ubuntu:22.04 \
-  bash -c '
-    set -e
-    apt-get update -qq
-    apt-get install -y --no-install-recommends curl ca-certificates python3 make g++ > /dev/null
-    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - > /dev/null 2>&1
-    apt-get install -y --no-install-recommends nodejs > /dev/null
-    cd /tmp
-    npm init -y > /dev/null
-    npm install --no-audit --no-fund --build-from-source better-sqlite3@${BETTER_SQLITE3_VERSION}
-    # Copy the whole node_modules tree so both the ESM resolver (for
-    # import "better-sqlite3") and the CJS resolver (for the internal
-    # require("bindings") inside better-sqlite3) find their packages via
-    # the standard node_modules walk at runtime.
-    rm -rf /out/node_modules
-    cp -r node_modules /out/node_modules
-    echo "  Packages: $(ls /out/node_modules | tr '\n' ' ')"
-    echo "  Native module: $(ls -la /out/node_modules/better-sqlite3/build/Release/better_sqlite3.node)"
-    echo "  ELF check: $(file /out/node_modules/better-sqlite3/build/Release/better_sqlite3.node)"
-  '
+  bash /build.sh
 
 if [ ! -f "$NM_DIR/better-sqlite3/build/Release/better_sqlite3.node" ]; then
   echo "ERROR: better-sqlite3 native module not built"
