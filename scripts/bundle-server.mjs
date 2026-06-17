@@ -14,7 +14,7 @@ await build({
   platform: 'node',
   format: 'esm',
   target: 'node20',
-  outfile: path.resolve(__dirname, '../build/magisk/files/dist/index.mjs'),
+  outfile: path.resolve(__dirname, '../build/bundle/index.mjs'),
   external: ['better-sqlite3'],
   // express and other CJS deps reference `require` at runtime; give the ESM
   // bundle a working one (same trick as the desktop bundle).

@@ -65,6 +65,11 @@ npm install --no-audit --no-fund --ignore-scripts
 # --- 2. Bundle server with esbuild -------------------------------------------
 echo "[2/7] Bundling server (esbuild, external: better-sqlite3)..."
 node "$SCRIPT_DIR/bundle-server.mjs"
+# bundle-server.mjs writes to build/bundle/index.mjs (a neutral location
+# independent of the Magisk module layout). Copy it into the module tree
+# so it lands inside the zip — service.sh loads it from $APP_DIR/dist/.
+mkdir -p "$MODULE_DIR/files/dist"
+cp "$PROJECT_DIR/build/bundle/index.mjs" "$MODULE_DIR/files/dist/index.mjs"
 
 # --- 3. Build client dashboard ------------------------------------------------
 echo "[3/7] Building React dashboard (vite)..."
