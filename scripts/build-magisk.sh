@@ -125,8 +125,12 @@ mkdir -p "$NATIVE_DIR"
 # so node-gyp compiles from source), then copy the resulting package out.
 # --platform=linux/arm64 requires qemu-user-static registered via binfmt_misc
 # (on Docker Desktop and most CI runners this is set up automatically).
+#
+# Mount the parent native/ dir (not better-sqlite3/ itself) so the in-container
+# `cp -r node_modules/better-sqlite3 /out/` lands at /out/better-sqlite3/ —
+# matching the $NATIVE_DIR path the host-side check and service.sh expect.
 docker run --rm --platform linux/arm64 \
-  -v "$NATIVE_DIR:/out" \
+  -v "$MODULE_DIR/files/native:/out" \
   -e BETTER_SQLITE3_VERSION="$BETTER_SQLITE3_VERSION" \
   ubuntu:22.04 \
   bash -c '
@@ -140,8 +144,10 @@ docker run --rm --platform linux/arm64 \
     npm install --no-audit --no-fund --build-from-source better-sqlite3@${BETTER_SQLITE3_VERSION}
     # Copy the whole package tree so require("better-sqlite3") resolves
     # lib/index.js -> build/Release/better_sqlite3.node at runtime.
-    cp -r node_modules/better-sqlite3 /out/
-    echo "  Native module built: $(ls -la /out/build/Release/better_sqlite3.node)"
+    rm -rf /out/better-sqlite3
+    cp -r node_modules/better-sqlite3 /out/better-sqlite3
+    echo "  Native module built: $(ls -la /out/better-sqlite3/build/Release/better_sqlite3.node)"
+    echo "  ELF check: $(file /out/better-sqlite3/build/Release/better_sqlite3.node)"
   '
 
 if [ ! -f "$NATIVE_DIR/build/Release/better_sqlite3.node" ]; then
