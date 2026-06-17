@@ -1,0 +1,6 @@
+id=freellmapi
+name=FreeLLMAPI - Free LLM Proxy
+version=v0.1.0
+versionCode=1
+author=freellmapi
+description=OpenAI-compatible endpoint aggregating 16+ free LLM providers behind one /v1/chat/completions. Self-hosted router with encrypted key storage, automatic fallover, and a React dashboard. Runs on port 3001.

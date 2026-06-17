@@ -6,7 +6,11 @@ import { fileURLToPath } from 'url';
 import { migrateDbSchema } from './migrations.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = path.resolve(__dirname, '../../data/freeapi.db');
+// FREEAPI_DB_PATH lets embedders (Magisk module, desktop bundle) relocate the
+// SQLite file — once the server is esbuild-bundled, __dirname no longer points
+// at server/dist, so the relative fallback below is only reliable for the
+// plain `tsc` + `node dist/index.js` dev/CI layout.
+const DB_PATH = process.env.FREEAPI_DB_PATH ?? path.resolve(__dirname, '../../data/freeapi.db');
 
 let db: Database.Database;
 
